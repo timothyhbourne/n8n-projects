@@ -1,0 +1,394 @@
+{
+  "name": "Invoice to Payment",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "filters": {
+          "q": "subject:invoice has:attachment"
+        }
+      },
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -160,
+        -360
+      ],
+      "id": "1f81bdb6-0803-448f-925b-5fd73f22ba84",
+      "name": "Received Invoice",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "ZR0hiNd1noIBlj9X",
+          "name": "Gmail account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "messageId": "={{ $json.id }}",
+        "simple": false,
+        "options": {
+          "downloadAttachments": true
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        60,
+        -360
+      ],
+      "id": "d018c0a1-ec7c-4f8f-98bd-8f006844d2bc",
+      "name": "Download PDF",
+      "webhookId": "8c34963a-55f5-4787-9216-e0ce1dfd2ebf",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "ZR0hiNd1noIBlj9X",
+          "name": "Gmail account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "binaryPropertyName": "attachment_0",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        280,
+        -360
+      ],
+      "id": "ba3eac6c-3d97-4726-9de8-dae185cb1c20",
+      "name": "Extract from File"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const text = $json[\"text\"];\n\n// Helper function to get first match from multiple options\nconst matchFirst = (regex, source) => (source.match(regex)?.[1] || \"\").trim();\n\nconst invoiceNumber = matchFirst(/INVOICE\\s*#?\\s*(\\d+)/i, text);\nconst name = matchFirst(/^(Timothy Harrington)/im, text);\nconst amount = matchFirst(/US\\$\\s?([\\d,]+\\.\\d{2})/, text); // grabs first US$ amount\nconst invoiceDate = matchFirst(/(\\w+\\s\\d{1,2},\\s\\d{4})/, text); // first date\nconst dueDate = matchFirst(/(?:\\n)(\\w+\\s\\d{1,2},\\s\\d{4})(?:\\nUS\\$)/, text); // date before first US$\n\nconst bankDetails = {\n  email: matchFirst(/Email Address:\\s*(.+)/i, text),\n  accountName: matchFirst(/Account Holders Name:\\s*(.+)/i, text),\n  routingNumber: matchFirst(/Routing Number:\\s*(\\d+)/i, text),\n  accountNumber: matchFirst(/Account Number:\\s*(\\d+)/i, text),\n  accountType: matchFirst(/Account Type:\\s*(.+)/i, text)\n};\n\nreturn {\n  json: {\n    invoiceNumber,\n    name,\n    amount,\n    invoiceDate,\n    dueDate,\n    bankDetails\n  }\n};\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        500,
+        -360
+      ],
+      "id": "920534e8-3d6d-4570-9337-f88fb8608a4a",
+      "name": "Parse PDF Into JSON"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "return {\n    json: {\n      quoteUuid: \"mock-quote-uuid-123\",\n      recipientId: \"mock-recipient-id-456\",\n      transferId: \"mock-transfer-id-789\",\n      status: \"drafted\",\n      invoiceReference: $json.invoiceNumber,\n      recipientName: $json.name,\n      amount: $json.amount\n    }\n  }"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        -360
+      ],
+      "id": "3bcab11c-70be-483c-8d7b-49594b45a2bc",
+      "name": "Payment Has Been Drafted (Simulation)"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "df775272-ee05-4606-aad5-a0721f934afb",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "drafted",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        940,
+        -360
+      ],
+      "id": "6bc91cda-6a7a-4c96-b0a9-22278e84f683",
+      "name": "If Payment = Drafted"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "0b02a1eb-9786-4150-a76f-ac3f61cd6f9f",
+              "leftValue": "={{ $json.message.blocks[1].elements[0].url }}",
+              "rightValue": "action=approve",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1380,
+        -480
+      ],
+      "id": "2775036e-1437-4e66-8386-726d9dc3f7f0",
+      "name": "True = Approved/ False = Rejected"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const timestamp = new Date().toISOString();\nconst date = new Date(timestamp);\n\nconst options = {\n  year: 'numeric',\n  month: 'long',\n  day: 'numeric',\n  hour: 'numeric',\n  minute: '2-digit',\n  hour12: true,\n  timeZone: 'Asia/Singapore'\n};\n\nconst formattedDate = date.toLocaleString('en-US', options);\n\nreturn {\n  json: {\n    paymentExecuted: true,\n    paymentSuccessful: true,\n    transactionId: `mock-tx-${Date.now()}`,\n    timestamp, // ← now matches what you formatted\n    recipient: $('Parse PDF Into JSON').item.json.bankDetails.accountName,\n    invoiceId: $('Parse PDF Into JSON').item.json.invoiceNumber,\n    amount: $('Parse PDF Into JSON').item.json.amount,\n    formattedDate\n  }\n};\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1620,
+        -560
+      ],
+      "id": "243b312c-1f96-4962-8c6a-b21d013abde4",
+      "name": "Approved, Executed & Success (Simulation)"
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C08NRJ0L20P",
+          "mode": "list",
+          "cachedResultName": "demo"
+        },
+        "messageType": "block",
+        "blocksUi": "={\n  \"blocks\": [\n    {\n      \"type\": \"section\",\n      \"text\": {\n        \"type\": \"mrkdwn\",\n        \"text\": \"*Invoice Drafted for Approval* \\n\\n*Recipient:* {{ $json.recipientName }} \\n*Amount:* ${{ $json.amount }} \\n*Transfer ID:* {{ $json.transferId }} \\n*Recipient ID:* {{ $json.recipientId }}\"\n      }\n    },\n    {\n      \"type\": \"actions\",\n      \"elements\": [\n        {\n          \"type\": \"button\",\n          \"text\": {\n            \"type\": \"plain_text\",\n            \"text\": \"✅ Approve\"\n          },\n          \"style\": \"primary\",\n          \"value\": \"{{ $json.invoiceReference }}\",\n          \"url\": \"https://yourdomain.com/webhook/approve-invoice?action=approve&invoiceId={{ $json.invoiceReference }}\"\n        },\n        {\n          \"type\": \"button\",\n          \"text\": {\n            \"type\": \"plain_text\",\n            \"text\": \"❌ Reject\"\n          },\n          \"style\": \"danger\",\n          \"value\": \"{{ $json.invoiceReference }}\",\n          \"url\": \"https://yourdomain.com/webhook/approve-invoice?action=reject&invoiceId={{ $json.invoiceReference }}\"\n        }\n      ]\n    }\n  ]\n}\n",
+        "otherOptions": {
+          "includeLinkToWorkflow": false,
+          "mrkdwn": true
+        }
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1160,
+        -480
+      ],
+      "id": "e6f93a5f-c9da-45e5-a416-7aed5826eda4",
+      "name": "Boss To Approve",
+      "webhookId": "7c522098-a91a-4e21-a820-197e6aa7dcdd",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "KuIXpnulqE5LvvDs",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Received Invoice').item.json.From }}",
+        "subject": "=Hey,  {{ $('Download PDF').item.json.from.value[0].name }}! Invoice {{ $json.invoiceId }} has been paid!",
+        "message": "=<p>Hi <strong>{{ $('Download PDF').item.json.from.value[0].name }}</strong>! 👋</p>\n\n<p>This email is to inform you that your latest invoice has been paid. Please find the details below:</p>\n\n<ul>\n  <li><strong>Invoice ID:</strong> {{ $json.invoiceId }}</li>\n  <li><strong>Recipient:</strong> {{ $json.recipient }}</li>\n  <li><strong>Amount:</strong> ${{ $json.amount }}</li>\n  <li><strong>Payment Date:</strong> {{ $json.formattedDate }}</li>\n  <li><strong>Status:</strong> ✅ Successful</li>\n</ul>\n\n<hr />",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1840,
+        -560
+      ],
+      "id": "d7c5559b-36b5-43da-b29f-1fb87c87acb1",
+      "name": "Gmail",
+      "webhookId": "4890a91a-7e26-4e8e-bc42-80216f177920",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "ZR0hiNd1noIBlj9X",
+          "name": "Gmail account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C08NRJ0L20P",
+          "mode": "list",
+          "cachedResultName": "demo"
+        },
+        "messageType": "block",
+        "blocksUi": "={\n  \"blocks\": [\n    {\n      \"type\": \"header\",\n      \"text\": {\n        \"type\": \"plain_text\",\n        \"text\": \"✅ Invoice Paid Successfully\"\n      }\n    },\n    {\n      \"type\": \"section\",\n      \"text\": {\n        \"type\": \"mrkdwn\",\n        \"text\": \"*Invoice ID:* {{ $('Approved, Executed & Success (Simulation)').item.json.invoiceId }}\\n*Recipient:* {{ $('Approved, Executed & Success (Simulation)').item.json.recipient }}\\n*Amount:* ${{ $('Approved, Executed & Success (Simulation)').item.json.amount }}\\n*Date:* {{ $('Approved, Executed & Success (Simulation)').item.json.formattedDate }}\\n*Transaction ID:* `{{ $('Approved, Executed & Success (Simulation)').item.json.transactionId }}`\"\n      }\n    },\n    {\n      \"type\": \"context\",\n      \"elements\": [\n        {\n          \"type\": \"mrkdwn\",\n          \"text\": \"_This payment was processed automatically by your n_\n}",
+        "otherOptions": {}
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        2060,
+        -560
+      ],
+      "id": "70d1d3e0-f915-474b-9760-9680b62d4c99",
+      "name": "Slack",
+      "webhookId": "06c45147-d47e-4472-b879-25fb123a43e6",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "KuIXpnulqE5LvvDs",
+          "name": "Slack account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Received Invoice": {
+      "main": [
+        [
+          {
+            "node": "Download PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download PDF": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "Parse PDF Into JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse PDF Into JSON": {
+      "main": [
+        [
+          {
+            "node": "Payment Has Been Drafted (Simulation)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Payment Has Been Drafted (Simulation)": {
+      "main": [
+        [
+          {
+            "node": "If Payment = Drafted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Payment = Drafted": {
+      "main": [
+        [
+          {
+            "node": "Boss To Approve",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "True = Approved/ False = Rejected": {
+      "main": [
+        [
+          {
+            "node": "Approved, Executed & Success (Simulation)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approved, Executed & Success (Simulation)": {
+      "main": [
+        [
+          {
+            "node": "Gmail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Boss To Approve": {
+      "main": [
+        [
+          {
+            "node": "True = Approved/ False = Rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail": {
+      "main": [
+        [
+          {
+            "node": "Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "e1c47101-80e1-4fc2-b9ac-3cd10d27f81b",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "57084ba5d0d00e0d5579fefb9695e3c18698dedf0b0e19656f4e2e91b4455887"
+  },
+  "id": "jkpkSJbCzNA1Mxf6",
+  "tags": []
+}
